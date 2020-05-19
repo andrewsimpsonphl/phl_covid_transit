@@ -1,6 +1,208 @@
 
+getAllMondays <- function(year) {
+  days <- as.POSIXlt(paste(year, 1:366, sep="-"), format="%Y-%j")
+  Ms <- days[days$wday==1]
+  Ms[!is.na(Ms)]  # Needed to remove NA from day 366 in non-leap years
+}
+
+mondays <- getAllMondays(2020) %>% as_tibble() %>%
+  rename(monday = value) %>%
+  mutate(year = year(monday)) %>%
+  mutate(month = month(monday)) %>%
+  mutate(week = week(monday))
 
 # compile apc data
+clean_apc_trips_input <- function(raw_apc_trips_data) {
+  apc_data <- raw_apc_trips_data %>%
+    select("trip_id" = "Trip",
+           "stop_id" = "Stop",
+           "total_ons" = "TotalIns", 
+           "total_offs" = "TotalOuts",
+           "number_trips" = "NbrTrips")
+}
+
+clean_apc_stops_input <- function(raw_apc_stops_data, weekdays = 5) {
+  apc_stops <- raw_apc_stops_data %>%
+    rename("stop_id" = "Stop",
+           "total_ons" = "Total_Ins", 
+           "total_offs" = "Total_Outs",
+           "number_samples" = "NbrStops",
+           "number_sampled_trips" = "NbrTrips",
+           "avg_ons" = "Mean_Ins",
+           "avg_offs" = "Mean_Outs",
+           "avg_load" = "Mean_Load",
+           "year" = "Year",
+           "week" = "Week") %>%
+    mutate(month = case_when(
+      Month == "Jan" ~ 1,
+      Month == "Feb" ~ 2,
+      Month == "Mar" ~ 3,
+      TRUE ~ 0)) %>%
+    left_join(mondays, by = c("week" = "week")) %>%
+    mutate(stop_id = as.numeric(stop_id))
+    #group_by(stop_id) %>%
+    #summarise(daily_ons = total_ons/weekdays)
+  
+  return(apc_stops)
+}
+
+# convert monthly APC data to daily
+# build list of apc sampled trips
+
+get_apc_trips_summary <- function(clean_apc_input_result) {
+  apc_trips <- clean_apc_input_result %>%
+    group_by(trip_id) %>%
+    summarise(total = n())
+  
+  return(apc_trips)
+}
+
+# build list of all trips and stops from gtfs
+get_gtfs_trips <- function(gtfs_df) {
+  gtfs_trips <- gtfs_df$trips %>% mutate(trip_id = as.numeric(trip_id))
+    
+}
+get_gtfs_stops <- function(gtfs_df) {
+  output <- gtfs_df$stops %>% mutate(stop_id = as.numeric(stop_id))
+  
+  return(output)
+}
+#test <- get_gtfs_stops(march_2020_gtfs)
+
+get_stop_frequencies <- function(gtfs_df) {
+  stops <- get_gtfs_stops(gtfs_df)
+  frequencies <- get_stop_frequency(gtfs_df) %>% mutate(stop_id = as.numeric(stop_id))
+  
+  ouput <- stops %>% left_join(frequencies) %>%
+    select(stop_id, stop_name, stop_lat, stop_lon, route_id, direction_id, departures)
+  return(ouput)
+}
+#test2 <- get_stop_frequencies(march_2020_gtfs)
+
+# input: gtfs object
+# output: df of each day in gtfs object's calendar w/ number of services that date
+get_gtfs_service_calendar <- function(gtfs) {
+  x <- gtfs %>% set_date_service_table()
+  output <- x$.$date_service_table %>% group_by(date) %>% count()
+  return(output)
+}
+calendar <- get_gtfs_service_calendar(gtfs_df$gtfs[[4]])
+
+#input: gtfs_service_calendar created with get_gtfs_service_calendar
+#output: lubridate::interval object representing the time span that gtfs object is active for
+get_gtfs_service_interval <- function(gtfs) {
+  calendar <- get_gtfs_service_calendar(gtfs)
+  list <- calendar$date
+  interval <- interval(start = first(list), end = last(list))
+  return(interval)
+}
+get_gtfs_service_interval(gtfs_df$gtfs[[4]])
+
+#test3 <- get_gtfs_service_calendar(gtfs_df$gtfs[[4]])
+
+#builds a df with four columns:
+# - file: the file name of the gtfs file stored to path
+# - file_path: the path of that file
+# - gtfs: the gtfs object rendered by that file
+# - frequencies: a df of each bus stop served in that gtfs file, with the frequency of service
+# - interval: a lubridate::interval object representing the lifespan of the gtfs object
+build_gtfs_df <- function(path = "./inputs/gtfs") {
+  l1 <- list.files("./inputs/gtfs")
+  df <- tibble(file = l1) %>% 
+    mutate(file_path = paste("./inputs/gtfs", file, sep = "/")) 
+  
+  gtfs_df_list <- df %>%
+    group_by(file, file_path) %>%
+    mutate(gtfs = map(file_path, read_gtfs)) 
+  
+  output <- gtfs_df_list %>%
+    group_by(file) %>%
+    mutate(frequencies = map(gtfs, get_stop_frequencies)) %>%
+    mutate(interval = map(gtfs, get_gtfs_service_interval))
+    # find the first day that the gtfs file is valid for each one
+  return(output)
+}
+
+get_daily_departures <- function(frequency_df) {
+  output <- frequency_df %>%
+    group_by(stop_id) %>%
+    summarise(daily_departures = sum(departures))
+  return(output)
+}
+
+
+get_departure_df <- function(gtfs_df) {
+  test <- gtfs_df %>% select(file, frequencies, interval) %>%
+    mutate(start = map(interval, int_start)) %>%
+    mutate(end = map(interval, int_end)) %>%
+    mutate(start_date = as_date(start[[1]])) %>%
+    arrange(start_date) %>% 
+    select(file, frequencies, start_date) %>%
+    mutate(daily_departures = map(frequencies, get_daily_departures)) %>%
+    select(file, start_date, daily_departures) 
+  
+  test$end_date <- lead(test$start_date - 1, default = today())
+  
+  departure_df <- test %>%
+    unnest(daily_departures) %>%
+    ungroup() %>%
+    select(stop_id, start_date, end_date, daily_departures) 
+  
+  return(departure_df)
+  
+}
+
+help_join <- function(stop_df, in_departure_df) {
+  output <- (stop_df) %>% 
+    select(stop, monday) %>%
+    fuzzy_left_join(departure_df, 
+                                by = c("stop" = "stop_id",
+                                       "monday" = "start_date",
+                                       "monday" = "end_date"),
+                                match_fun = list(`==`, `>=`, `<=`)) %>%
+    select(monday, daily_departures) %>%
+    as_data_frame()
+  return(output) 
+}
+
+stop_test <- stop_level_data %>% filter(stop_id == 12)
+
+# input: list of gtfs objects
+# output: df of stops, each column being the frequency under the gtfs object presented
+build_stop_departure_board <- function(stop_level_data, departure_df) {
+  stops <- lazy_dt(stop_level_data) %>%
+    mutate(stop = stop_id) %>%
+    select(stop_id, stop, monday, total_ons, total_offs, number_samples, number_sampled_trips) %>%
+    group_by(stop_id) %>%
+    dt_nest(stop_id, total_ons, total_offs, number_samples, number_sampled_trips) %>%
+    mutate(departures = map(data, help_join, in_departure_df = departure_df)) %>%
+    dt_unnest(departures)
+  
+  return(stops)
+  
+}
+
+
+
+
+validate_apc_trips_input <- function(apc_trips_clean, gtfs_df) {
+  apc_trips <- get_apc_trips_summary(apc_trips_clean)
+  gtfs_trips <- get_gtfs_trips(gtfs_df)
+  
+  joined <- full_join(apc_trips, gtfs_trips, by = "trip_id")
+  
+  return(joined)
+}
+
+validate_apc_stops_input <- function(apc_stops_clean, gtfs_df) {
+  
+  apc_stops <- (apc_stops_clean)
+  gtfs_stops <- get_gtfs_stops(gtfs_df)
+  
+  joined <- left_join(gtfs_stops, apc_stops, by = "stop_id")
+  
+  return(joined)
+}
 
 
 # assign periods to APC data
@@ -46,5 +248,8 @@ get_period_stop_data <- function(apc_data) {
   return(output)
 }
 
+get_routes_by_stop <- function(gtfs_obj) {
+  stops <- gtfs_obj$stops 
 
+  }
 
