@@ -179,7 +179,78 @@ build_stop_weekly_df <- function(stop_level_data, departure_df) {
 }
 #test <- build_stop_weekly_df(stop_level_data %>% filter(stop_id == 2), departure_df)
 
+# build before and after dataframe
+build_comp_df <- function(tracts_weekly_ridership, cut = "2020-03-30") {
+  # get average pre-covid ridership data for each census tract
+  pre_covid <- tracts_weekly_ridership %>%
+    filter(monday < cut) %>%
+    group_by(GEOID, ccd, DIST_NAME) %>%
+    summarise(pre_covid_ridership = mean(ridership, na.rm = TRUE)) %>%
+    replace_na(list(post_covid_ridership = 0))
+  
+  #average post-covid ridership for each census tract
+  post_covid <- tracts_weekly_ridership %>%
+    filter(monday >= cut) %>%
+    group_by(GEOID, ccd, DIST_NAME) %>%
+    summarise(post_covid_ridership = mean(ridership, na.rm = TRUE)) %>%
+    replace_na(list(post_covid_ridership = 0))
+  
+  # put pre and post covid dfs together for comparison table
+  comp <- pre_covid %>%
+    st_join(post_covid) %>%
+    mutate(diff = post_covid_ridership -  pre_covid_ridership,
+           pct_change = diff / pre_covid_ridership) %>%
+    filter(pct_change != Inf) %>%
+    select(GEOID.x, ccd.x, DIST_NAME.x, pre_covid_ridership, post_covid_ridership, diff, pct_change) %>%
+    left_join(acs_spread, by = c("GEOID.x" = "GEOID"))
+  
+  return(comp)
+}
+#test <- build_comp_df(tracts_weekly_ridership, cut = "2020-03-30")
 
+
+import_acs <- function(key, county_ls = c("Philadelphia")) { 
+  # Read in Census Data - build a lookup table if you want an easy reference point
+  census_api_key(key) # Supply your census API key
+  #v18 <- load_variables(2018, "acs5", cache = TRUE) # all of the 2018 5-Year ACS variables for easy viewing
+  
+  # get the ACS data we'll be using
+  acs_data <- get_acs(geography = "tract", state = "PA", 
+                      county = county_ls,
+                      variables = c(
+                        total_pop = "B01001_001",
+                        med_age = "B01002_001",
+                        med_income = "B19013_001",
+                        education_tot = "B15002_001",
+                        eductation_HS = "B15002_011",
+                        education_BA = "B15002_015",
+                        education_MS = "B15002_016"
+                      ))
+  # going to factor the income bins - store them here in order
+  income_class <- c("very_low_income", "low_income", "mid_income", "high_income", "very_high_income")
+  
+  # spread the acs data to a more usable format for visulization (and build the income brackets)
+  acs_spread <- acs_data %>%
+    select(-moe) %>%
+    spread(key = `variable`, value = `estimate`) %>%
+    mutate(education_HS_p = eductation_HS / total_pop,
+           education_BA_p = education_BA / total_pop,
+           education_MS_p = education_MS / total_pop) %>%
+    mutate_if(is.numeric, round, 2) %>%
+    mutate(income_bucket = case_when(
+      med_income < 20000 ~ "very_low_income",
+      med_income >= 20000 & med_income < 35000 ~ "low_income",
+      med_income >= 35000 & med_income < 55000 ~ "mid_income",
+      med_income >= 55000 & med_income < 100000 ~ "high_income",
+      med_income >100000 ~ "very_high_income")) %>%
+    mutate(income_bucket = factor(
+      income_bucket, 
+      ordered = TRUE,
+      levels = income_class) # order the factor by the levels listed above
+    )
+  }
+
+  
 #### OTHER - NOT IN USE ------------------------------------ ####
 validate_apc_trips_input <- function(apc_trips_clean, gtfs_df) {
   apc_trips <- get_apc_trips_summary(apc_trips_clean)

@@ -1,0 +1,229 @@
+---
+title: "SEPTA COVID Data Visualization"
+author: "Andrew Simpson"
+date: "5/20/2020"
+output: html_document
+---
+<style type="text/css">
+body{ /* Normal  */
+  font-family: "Open Sans";
+  font-size: 14px;
+  }
+h1.title {
+  font-family: "Montserrat";
+  font-size: 36px;
+  color: `rphl::get_colors("light_blue")`;
+}
+h3.subtitle {
+  font-family: "Montserrat";
+  font-size: 28px;
+  color: `rphl::get_colors("light_blue")`;
+}
+h1 { /* Header 1 */
+  font-family: "Montserrat";
+  font-size: 28px;
+  
+}
+h2 { /* Header 2 */
+  font-family: "Montserrat";
+  font-size: 22px;
+  
+}
+h3 { /* Header 3 */
+  font-size: 18px;
+  font-family: "Montserrat";
+  
+}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, out.width="100%")
+
+require(tidyverse) ; require(sf) ; require(scales) ; require(lubridate) ; require(rphl)
+
+source("./code/functions.R")
+
+#### Import data &  join as needed ----------------------------------------- ####
+# census tracts
+tract_sf <- read_sf("./inputs/tl_2019_42_tract/tl_2019_42_tract.shp")
+
+# planning districts
+planningdistricts_sf <- read_sf("./inputs/Planning_Districts.geojson") %>% st_transform(crs = 4269)
+
+# center city
+ccd_sf <- read_sf("./inputs/CCD_Boundary.geojson") %>% st_transform(crs = 4269) %>% mutate(ccd = TRUE)
+
+# pre-prepared ACS data
+acs_spread <- read_csv("./prepped_data/acs_spread.csv") %>%
+  mutate(income_bucket = factor(
+      income_bucket, 
+      ordered = TRUE,
+      levels = c("very_low_income", "low_income", "mid_income", "high_income", "very_high_income"))
+    )
+
+stops_byweek_ridership_sf <- st_read("./prepped_data/stop_data.geojson") %>% 
+  mutate(stop_id = as.numeric(stop_id))
+
+# assign census tracts to each bus stop
+stops_tracts <- st_join(stops_byweek_ridership_sf,
+                            left = FALSE,
+                            tract_sf["GEOID"]) %>%
+  mutate(GEOID = as.numeric(GEOID))
+
+#### Shape the data for visulization  ------------------------------------- ####
+
+# Get bus network-wide ridership by week
+weekly_ridership <- stops_byweek_ridership_sf %>%
+  group_by(monday) %>%
+  summarise(daily_ridership = sum(daily_ons, na.rm = TRUE))
+
+# create df of census tracts with bus ridership by week & district boundaries (ccd, planning)
+tracts_weekly_ridership <- stops_tracts %>%
+  group_by(GEOID, monday) %>%
+  summarise(ridership = sum(daily_ons)) %>%
+  right_join(acs_spread) %>%
+  st_join(ccd_sf) %>% 
+  st_join(planningdistricts_sf)
+
+# create before/after dataframe - using "2020-03-30" as the cut point
+comp <- build_comp_df(tracts_weekly_ridership, cut = "2020-03-30")
+
+income_tracts <- comp %>%
+  group_by(income_bucket) %>%
+  summarise(num_tracts = n(),
+            pre_covid = sum(pre_covid_ridership),
+            post_covid = sum(post_covid_ridership),
+            diff = post_covid - pre_covid,
+            pct_change = diff / pre_covid) %>%
+  filter(is.na(income_bucket) == FALSE)
+
+income_planning <- comp %>%
+  group_by(DIST_NAME.x) %>%
+  summarise(pre_covid = sum(pre_covid_ridership),
+            post_covid = sum(post_covid_ridership),
+            avg_med_income = mean(med_income, na.rm = TRUE),
+            diff = post_covid - pre_covid,
+            pct_change = diff / pre_covid)
+
+income_planning_linear <- tracts_weekly_ridership %>%
+  group_by(DIST_NAME, monday) %>%
+  summarise(daily_ridership = sum(ridership, na.rm = TRUE)) %>%
+  arrange(monday) %>%
+  filter(monday >= "2020-02-03") %>% 
+  mutate(delta = daily_ridership - first(daily_ridership)) %>% 
+  mutate(delta_p = delta / first(daily_ridership))
+
+income_tract_linear <- tracts_weekly_ridership %>%
+  group_by(income_bucket, monday) %>%
+  summarise(daily_ridership = sum(ridership, na.rm = TRUE)) %>%
+  arrange(monday) %>%
+  filter(monday >= "2020-02-03" & income_bucket %>% is.na() == FALSE) %>% 
+  mutate(delta = daily_ridership - first(daily_ridership)) %>% 
+  mutate(delta_p = delta / first(daily_ridership))
+
+```
+
+## Data Generation
+See GitHub repository for documentation of methodology and approach. In short, data is taken from weekly samples of SEPTA bus APC data and is used to generate daily ridership at each stop. The data is not comprehensive and it is not well audited/cleaned, but it is the best snapshot of what has happened to transit ridership on a weekly basis through this crisis. 
+
+### Data Sources:
+Data was taken from: 
+
+- SEPTA Automated Passenger Count Date + Turnstile Data (Not yet incorporated)
+- ACS 2018 5-Year Estimates
+- Misc. shapes pulled from opendataphilly
+
+## Describing the Data
+TODO - show some basic descriptive statistics of the data
+
+## Visualizing the Data
+
+```{r weekly_ridership, echo=FALSE}
+# visualize that weekly ridership - yikes
+ggplot(weekly_ridership, aes(x = as_date(monday), y = daily_ridership)) +
+  geom_bar(position="dodge", stat="identity") + 
+  scale_y_continuous(labels = scales::comma, limits = c(0, 70000), breaks = seq(0, 70000, by=10000)) +
+  scale_x_date(date_breaks = "1 week") + 
+  xlab("Week Starting With") + 
+  ylab("Daily Bus Ridership") + 
+  ggtitle("SEPTA Daily Bus Ridership (2020)") + 
+  theme_phl() + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+#basic scatter plot of ridership and income - should scale points by total ridership?
+ggplot(comp %>% filter(pct_change < 0.25), aes(x = med_income, y = pct_change)) +
+  geom_point() +
+  geom_smooth(method = "lm", formula = y ~ x) +
+  scale_y_continuous(labels = scales::percent) + 
+  theme_phl()
+```
+
+```{r tract_level, echo=FALSE}
+# need to lable n() for each bar
+ggplot(income_tracts %>% filter(pct_change < 0.25), aes(x = income_bucket, y = pct_change)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(labels = scales::percent) + 
+  scale_x_discrete(labels = c("Very Low Income (< 20k)", "Low Income (<35k)", "Med Income (<50k)", "High Income (<100k)", "Very High (>100k)")) + 
+  coord_cartesian(ylim = c(-1, -.5)) +
+  theme_phl() +
+  ggtitle("Bus Ridership Changes by Income Level of Census Tract") +
+  ylab("Bus Ridership Change Post-COVID") + 
+  xlab("Census Tracts Binned by Income Level")
+
+income_tracts_ccd <- comp %>%
+  group_by(income_bucket, ccd.x) %>%
+  summarise(pre_covid = sum(pre_covid_ridership),
+            post_covid = sum(post_covid_ridership),
+            diff = post_covid - pre_covid,
+            pct_change = diff / pre_covid) %>%
+  mutate(ccd = case_when(
+    ccd.x == TRUE ~ TRUE,
+    TRUE ~ FALSE
+  )) %>%
+  filter(is.na(income_bucket) == FALSE & ccd == FALSE)
+
+ggplot(income_tracts_ccd, aes(x = income_bucket, y = pct_change)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(labels = scales::percent) + 
+  scale_x_discrete(labels = c("Very Low Income (< 20k)", "Low Income (<35k)", "Med Income (<50k)", "High Income   (<100k)", "Very High (>100k)")) + 
+  coord_cartesian(ylim = c(-1, -.5)) +
+  theme_phl() +
+  ggtitle("Bus Ridership Changes by Income Level of Census Tract") +
+  ylab("Bus Ridership Change Post-COVID") + 
+  xlab("Census Tracts Binned by Income Level (Excluding Center City)")
+
+# label the theme better
+ggplot(income_tract_linear, aes(x = monday, y = delta_p, color = income_bucket)) +
+  geom_line() +
+  scale_y_continuous(labels = scales::percent) + 
+  xlab("Week Starting With") + 
+  ylab("Daily Bus Ridership Change") + 
+  ggtitle("") + 
+  theme_phl()
+```
+
+``` {r planning_district, echo=FALSE} 
+# visualize ridership change by planning district
+
+ggplot(income_planning, aes(x = reorder(DIST_NAME.x, avg_med_income), y = pct_change, fill = avg_med_income)) +
+  geom_bar(stat = "identity") +
+  scale_y_continuous(labels = scales::percent) + 
+  coord_cartesian(ylim = c(-1, -.5)) + 
+  theme_phl() + 
+  scale_fill_phl(palette = "blues", discrete = F) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.95)) +
+  xlab("Planning District (Sorted by Income)") +
+  ylab("Bus Ridership Change Post-COVID")
+
+# need to put district names at the ends of the lines and vary the lines more to make it useful
+ggplot(income_planning_linear, aes(x = as_date(monday), y = delta_p, color = DIST_NAME)) +
+  geom_line() +
+  scale_y_continuous(labels = scales::percent) + 
+  scale_x_date(date_breaks = "1 week") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.95)) +
+  xlab("Week Starting With") + 
+  ylab("Daily Bus Ridership Change") + 
+  ggtitle("") + 
+  theme_phl()
+```
+
