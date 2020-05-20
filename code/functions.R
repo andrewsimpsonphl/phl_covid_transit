@@ -24,20 +24,13 @@ clean_apc_trips_input <- function(raw_apc_trips_data) {
 clean_apc_stops_input <- function(raw_apc_stops_data, weekdays = 5) {
   apc_stops <- raw_apc_stops_data %>%
     rename("stop_id" = "Stop",
-           "total_ons" = "Total_Ins", 
-           "total_offs" = "Total_Outs",
-           "number_samples" = "NbrStops",
-           "number_sampled_trips" = "NbrTrips",
-           "avg_ons" = "Mean_Ins",
-           "avg_offs" = "Mean_Outs",
-           "avg_load" = "Mean_Load",
            "year" = "Year",
            "week" = "Week") %>%
-    mutate(month = case_when(
-      Month == "Jan" ~ 1,
-      Month == "Feb" ~ 2,
-      Month == "Mar" ~ 3,
-      TRUE ~ 0)) %>%
+    group_by(week, stop_id) %>%
+    summarise(total_ons = sum(Total_Ins),
+              total_offs = sum(Total_Outs),
+              number_samples = sum(NbrStops),
+              number_sampled_trips = sum(NbrTrips)) %>%
     left_join(mondays, by = c("week" = "week")) %>%
     mutate(stop_id = as.numeric(stop_id))
     #group_by(stop_id) %>%
@@ -119,7 +112,6 @@ build_gtfs_df <- function(path = "./inputs/gtfs") {
     group_by(file) %>%
     mutate(frequencies = map(gtfs, get_stop_frequencies)) %>%
     mutate(interval = map(gtfs, get_gtfs_service_interval))
-    # find the first day that the gtfs file is valid for each one
   return(output)
 }
 
@@ -152,39 +144,41 @@ get_departure_df <- function(gtfs_df) {
   
 }
 
-help_join <- function(stop_df, in_departure_df) {
-  output <- (stop_df) %>% 
-    select(stop, monday) %>%
-    fuzzy_left_join(departure_df, 
-                                by = c("stop" = "stop_id",
-                                       "monday" = "start_date",
-                                       "monday" = "end_date"),
-                                match_fun = list(`==`, `>=`, `<=`)) %>%
-    select(monday, daily_departures) %>%
-    as_data_frame()
-  return(output) 
-}
+library(data.table)
 
-stop_test <- stop_level_data %>% filter(stop_id == 12)
-
-# input: list of gtfs objects
-# output: df of stops, each column being the frequency under the gtfs object presented
-build_stop_departure_board <- function(stop_level_data, departure_df) {
-  stops <- lazy_dt(stop_level_data) %>%
-    mutate(stop = stop_id) %>%
-    select(stop_id, stop, monday, total_ons, total_offs, number_samples, number_sampled_trips) %>%
+build_stop_weekly_df <- function(stop_level_data, departure_df) {
+  stop_dt <- stop_level_data %>%
+    lazy_dt() %>%
+    select(stop_id, monday, total_ons, total_offs, number_samples, number_sampled_trips) %>%
     group_by(stop_id) %>%
-    dt_nest(stop_id, total_ons, total_offs, number_samples, number_sampled_trips) %>%
-    mutate(departures = map(data, help_join, in_departure_df = departure_df)) %>%
-    dt_unnest(departures)
+    as.data.frame()
   
-  return(stops)
+  db <- departure_df %>% mutate(interval = interval(start_date, end_date)) %>% as.data.table()
   
+  output <- db[stop_dt, on=.(stop_id = stop_id), 
+             allow.cartesian=TRUE,
+             nomatch = NA, 
+             .(stop_id, x.stop_id, monday, total_ons, total_offs, number_samples, number_sampled_trips,
+               x.start_date, x.end_date, daily_departures)] %>%
+    mutate(interval = interval(x.start_date, x.end_date)) %>% 
+    rowwise() %>%
+    mutate(filter_on = monday %within% interval) %>%
+    ungroup()  %>%
+    filter(filter_on == TRUE) %>%
+    select(stop_id, monday, interval, total_ons, total_offs,  number_samples, number_sampled_trips, daily_departures) %>%
+    mutate(
+      ons_per_trip = total_ons / number_sampled_trips,
+      off_per_trip = total_offs / number_sampled_trips,
+      sample_rate = number_sampled_trips / (daily_departures * 5),
+      daily_ons = ons_per_trip * daily_departures
+      ) 
+  
+  return(output)
 }
+#test <- build_stop_weekly_df(stop_level_data %>% filter(stop_id == 2), departure_df)
 
 
-
-
+#### OTHER - NOT IN USE ------------------------------------ ####
 validate_apc_trips_input <- function(apc_trips_clean, gtfs_df) {
   apc_trips <- get_apc_trips_summary(apc_trips_clean)
   gtfs_trips <- get_gtfs_trips(gtfs_df)
