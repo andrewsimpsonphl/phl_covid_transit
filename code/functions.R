@@ -79,7 +79,7 @@ get_gtfs_service_calendar <- function(gtfs) {
   output <- x$.$date_service_table %>% group_by(date) %>% count()
   return(output)
 }
-calendar <- get_gtfs_service_calendar(gtfs_df$gtfs[[4]])
+#calendar <- get_gtfs_service_calendar(gtfs_df$gtfs[[4]])
 
 #input: gtfs_service_calendar created with get_gtfs_service_calendar
 #output: lubridate::interval object representing the time span that gtfs object is active for
@@ -89,7 +89,7 @@ get_gtfs_service_interval <- function(gtfs) {
   interval <- interval(start = first(list), end = last(list))
   return(interval)
 }
-get_gtfs_service_interval(gtfs_df$gtfs[[4]])
+#get_gtfs_service_interval(gtfs_df$gtfs[[4]])
 
 #test3 <- get_gtfs_service_calendar(gtfs_df$gtfs[[4]])
 
@@ -100,6 +100,8 @@ get_gtfs_service_interval(gtfs_df$gtfs[[4]])
 # - frequencies: a df of each bus stop served in that gtfs file, with the frequency of service
 # - interval: a lubridate::interval object representing the lifespan of the gtfs object
 build_gtfs_df <- function(path = "./inputs/gtfs") {
+  print("Building GTFS dataframe - apologies for taking too long!")
+  
   l1 <- list.files("./inputs/gtfs")
   df <- tibble(file = l1) %>% 
     mutate(file_path = paste("./inputs/gtfs", file, sep = "/")) 
@@ -144,9 +146,9 @@ get_departure_df <- function(gtfs_df) {
   
 }
 
-library(data.table)
-
 build_stop_weekly_df <- function(stop_level_data, departure_df) {
+  print("Building bus stop database - again sorry taking awhile.")
+  
   stop_dt <- stop_level_data %>%
     lazy_dt() %>%
     select(stop_id, monday, total_ons, total_offs, number_samples, number_sampled_trips) %>%
