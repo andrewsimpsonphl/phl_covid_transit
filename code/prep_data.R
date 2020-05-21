@@ -71,7 +71,7 @@ stops_byweek_ridership_sf <- build_stop_data(
 )
 
 # import and build an apc dataframe (using dplyr::spread approach)
-acs_spread <- import_acs(key = "eac2c3c2ce9ca6550b188093d03c636351a563e4",
+acs_spread <- import_acs(key = "",
                          county_ls = c("Philadelphia"))
 
 # store the data that needs to be put pulled for visualizations
