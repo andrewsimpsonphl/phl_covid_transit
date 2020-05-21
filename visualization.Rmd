@@ -12,7 +12,7 @@ body{ /* Normal  */
 h1.title {
   font-family: "Montserrat";
   font-size: 36px;
-  color: `rphl::get_colors("light_blue")`;
+  color: `{r} rphl::get_colors("light_blue")`;
 }
 h3.subtitle {
   font-family: "Montserrat";
@@ -40,6 +40,7 @@ h3 { /* Header 3 */
 knitr::opts_chunk$set(echo = TRUE, out.width="100%")
 
 require(tidyverse) ; require(sf) ; require(scales) ; require(lubridate) ; require(rphl)
+require(grid) ; require(gridExtra)
 
 source("./code/functions.R")
 
@@ -88,6 +89,7 @@ tracts_weekly_ridership <- stops_tracts %>%
 # create before/after dataframe - using "2020-03-30" as the cut point
 comp <- build_comp_df(tracts_weekly_ridership, cut = "2020-03-30")
 
+# census tract binned by income w/ pre/post covid ridership
 income_tracts <- comp %>%
   group_by(income_bucket) %>%
   summarise(num_tracts = n(),
@@ -97,6 +99,7 @@ income_tracts <- comp %>%
             pct_change = diff / pre_covid) %>%
   filter(is.na(income_bucket) == FALSE)
 
+# planning districts binned by income w/ pre/pose covid ridership
 income_planning <- comp %>%
   group_by(DIST_NAME.x) %>%
   summarise(pre_covid = sum(pre_covid_ridership),
@@ -105,19 +108,21 @@ income_planning <- comp %>%
             diff = post_covid - pre_covid,
             pct_change = diff / pre_covid)
 
+# df that shows delta of ridership for each planning tract over time 
 income_planning_linear <- tracts_weekly_ridership %>%
   group_by(DIST_NAME, monday) %>%
   summarise(daily_ridership = sum(ridership, na.rm = TRUE)) %>%
   arrange(monday) %>%
-  filter(monday >= "2020-02-03") %>% 
+  filter(monday >= "2020-02-03") %>% # use this jawn to set "week 0" for the delta calculation
   mutate(delta = daily_ridership - first(daily_ridership)) %>% 
   mutate(delta_p = delta / first(daily_ridership))
 
+# df that shows delta of ridership for each income tract over time
 income_tract_linear <- tracts_weekly_ridership %>%
   group_by(income_bucket, monday) %>%
   summarise(daily_ridership = sum(ridership, na.rm = TRUE)) %>%
   arrange(monday) %>%
-  filter(monday >= "2020-02-03" & income_bucket %>% is.na() == FALSE) %>% 
+  filter(monday >= "2020-02-03" & income_bucket %>% is.na() == FALSE) %>% # use this jawn to set "week 0" for the delta calculation
   mutate(delta = daily_ridership - first(daily_ridership)) %>% 
   mutate(delta_p = delta / first(daily_ridership))
 
@@ -158,17 +163,20 @@ ggplot(comp %>% filter(pct_change < 0.25), aes(x = med_income, y = pct_change)) 
   theme_phl()
 ```
 
-```{r tract_level, echo=FALSE}
+### Examining Ridership by Census Tract
+
+```{r tract_level, echo=FALSE, warning=FALSE}
 # need to lable n() for each bar
-ggplot(income_tracts %>% filter(pct_change < 0.25), aes(x = income_bucket, y = pct_change)) +
+p1 <- ggplot(income_tracts %>% filter(pct_change < 0.25), aes(x = income_bucket, y = pct_change)) +
   geom_bar(stat = "identity") +
   scale_y_continuous(labels = scales::percent) + 
-  scale_x_discrete(labels = c("Very Low Income (< 20k)", "Low Income (<35k)", "Med Income (<50k)", "High Income (<100k)", "Very High (>100k)")) + 
+  scale_x_discrete(labels = c("Very Low Income (< 20k)", "Low Income (<35k)", "Med Income (<50k)", "High Income (<100k)", "Very High (>100k)")) +
   coord_cartesian(ylim = c(-1, -.5)) +
-  theme_phl() +
-  ggtitle("Bus Ridership Changes by Income Level of Census Tract") +
+  theme_phl(base_size = 9) +
+  #ggtitle("Bus Ridership Changes by Income Level of Census Tract") +
   ylab("Bus Ridership Change Post-COVID") + 
-  xlab("Census Tracts Binned by Income Level")
+  xlab("Census Tracts Binned by Income Level") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.95))
 
 income_tracts_ccd <- comp %>%
   group_by(income_bucket, ccd.x) %>%
@@ -182,16 +190,23 @@ income_tracts_ccd <- comp %>%
   )) %>%
   filter(is.na(income_bucket) == FALSE & ccd == FALSE)
 
-ggplot(income_tracts_ccd, aes(x = income_bucket, y = pct_change)) +
+p2 <- ggplot(income_tracts_ccd, aes(x = income_bucket, y = pct_change)) +
   geom_bar(stat = "identity") +
   scale_y_continuous(labels = scales::percent) + 
   scale_x_discrete(labels = c("Very Low Income (< 20k)", "Low Income (<35k)", "Med Income (<50k)", "High Income   (<100k)", "Very High (>100k)")) + 
   coord_cartesian(ylim = c(-1, -.5)) +
-  theme_phl() +
-  ggtitle("Bus Ridership Changes by Income Level of Census Tract") +
+  theme_phl(base_size = 9) +
+  #ggtitle("Bus Ridership Changes by Income Level of Census Tract") +
   ylab("Bus Ridership Change Post-COVID") + 
-  xlab("Census Tracts Binned by Income Level (Excluding Center City)")
+  xlab("Census Tracts Binned by Income Level (Excluding Center City)") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 0.95))
 
+grid.arrange(p1, p2, nrow = 1,
+             top = textGrob("Bus Ridership Changes by Income Level of Census Tract", 
+                            gp=gpar(fontsize=10,fontfamily="Montserrat")))
+```
+
+``` {r income_tract_linear, echo=FALSE}
 # label the theme better
 ggplot(income_tract_linear, aes(x = monday, y = delta_p, color = income_bucket)) +
   geom_line() +
