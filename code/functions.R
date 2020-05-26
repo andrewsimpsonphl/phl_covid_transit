@@ -117,22 +117,28 @@ build_gtfs_df <- function(path = "./inputs/gtfs") {
   return(output)
 }
 
-get_daily_departures <- function(frequency_df) {
+get_daily_stop_departures <- function(frequency_df) {
   output <- frequency_df %>%
     group_by(stop_id) %>%
     summarise(daily_departures = sum(departures))
   return(output)
 }
 
+get_daily_route_departures <- function(frequency_df) {
+  output <- frequency_df %>%
+    group_by(route) %>%
+    summarise(daily_departures = sum(departures))
+  return(output)
+}
 
-get_departure_df <- function(gtfs_df) {
+get_stop_departure_df <- function(gtfs_df) {
   test <- gtfs_df %>% select(file, frequencies, interval) %>%
     mutate(start = map(interval, int_start)) %>%
     mutate(end = map(interval, int_end)) %>%
     mutate(start_date = as_date(start[[1]])) %>%
     arrange(start_date) %>% 
     select(file, frequencies, start_date) %>%
-    mutate(daily_departures = map(frequencies, get_daily_departures)) %>%
+    mutate(daily_departures = map(frequencies, get_daily_stop_departures)) %>%
     select(file, start_date, daily_departures) 
   
   test$end_date <- lead(test$start_date - 1, default = today())

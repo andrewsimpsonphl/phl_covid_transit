@@ -38,16 +38,19 @@ source("./code/functions.R")
 build_stop_data <- function(apc_path, gtfs_path) {
   
   # import dataset from Infodev of stop level data aggregated to the week
-  year_month_week_stop <- read.csv(apc_path)
+  year_month_week_stop <- read.csv("./inputs/new_input/Data_Year_Month_Week_Stop.csv")
+  year_month_route_stop <- read.csv("./inputs/new_input/Data_Year_Month_Route_stop.csv")
+  year_week_stop <- read.csv("./inputs/new_input/Data_Year_Week_Stop.csv") # should use this instead of month_week
+  
   
   # clean up that apc data
-  stop_level_data <- year_month_week_stop %>% clean_apc_stops_input()
+  stop_level_data <- year_week_stop %>% clean_apc_stops_input()
   
   # import gtfs files in path
   gtfs_df <- build_gtfs_df(path = gtfs_path)
   
   #build departure df of gtfs data
-  departure_df <- get_departure_df(gtfs_df)
+  departure_df <- get_stop_departure_df(gtfs_df)
   
   # build stop by week with daily ridership computed using average samples and actual departures 
   stops_byweek_ridership <- build_stop_weekly_df(stop_level_data, departure_df)
@@ -66,7 +69,7 @@ build_stop_data <- function(apc_path, gtfs_path) {
 }
 
 stops_byweek_ridership_sf <- build_stop_data(
-  apc_path = "./inputs/new_input/Data_year_Month_Week_Stop.csv",
+  apc_path = ,
   gtfs_path = "./inputs/gtfs"
 )
 

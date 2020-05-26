@@ -69,7 +69,7 @@ stops_byweek_ridership_sf <- st_read("./prepped_data/stop_data.geojson") %>%
 stops_tracts <- st_join(stops_byweek_ridership_sf,
                             left = FALSE,
                             tract_sf["GEOID"]) %>%
-  mutate(GEOID = as.numeric(GEOID))
+  mutate(GEOID = as.numeric(GEOID)) 
 
 #### Shape the data for visulization  ------------------------------------- ####
 
