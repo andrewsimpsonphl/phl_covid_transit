@@ -163,6 +163,7 @@ build_stop_weekly_df <- function(stop_level_data, departure_df) {
   
   db <- departure_df %>% mutate(interval = interval(start_date, end_date)) %>% as.data.table()
   
+  # utilize data.table so it doesn't take days to do
   output <- db[stop_dt, on=.(stop_id = stop_id), 
              allow.cartesian=TRUE,
              nomatch = NA, 
@@ -186,17 +187,17 @@ build_stop_weekly_df <- function(stop_level_data, departure_df) {
 #test <- build_stop_weekly_df(stop_level_data %>% filter(stop_id == 2), departure_df)
 
 # build before and after dataframe
-build_comp_df <- function(tracts_weekly_ridership, cut = "2020-03-30") {
+build_comp_df <- function(tracts_weekly_ridership, cut = c("2020-03-16", "2020-03-30")) {
   # get average pre-covid ridership data for each census tract
   pre_covid <- tracts_weekly_ridership %>%
-    filter(monday < cut) %>%
+    filter(monday <= cut[1]) %>%
     group_by(GEOID, ccd, DIST_NAME) %>%
     summarise(pre_covid_ridership = mean(ridership, na.rm = TRUE)) %>%
     replace_na(list(post_covid_ridership = 0))
   
   #average post-covid ridership for each census tract
   post_covid <- tracts_weekly_ridership %>%
-    filter(monday >= cut) %>%
+    filter(monday >= cut[2]) %>%
     group_by(GEOID, ccd, DIST_NAME) %>%
     summarise(post_covid_ridership = mean(ridership, na.rm = TRUE)) %>%
     replace_na(list(post_covid_ridership = 0))
@@ -215,7 +216,7 @@ build_comp_df <- function(tracts_weekly_ridership, cut = "2020-03-30") {
 #test <- build_comp_df(tracts_weekly_ridership, cut = "2020-03-30")
 
 
-import_acs <- function(key, county_ls = c("Philadelphia")) { 
+import_acs <- function(key, county_ls = c("Philadelphia")) { # David todo: turn variables into parameter of function
   # Read in Census Data - build a lookup table if you want an easy reference point
   census_api_key(key) # Supply your census API key
   #v18 <- load_variables(2018, "acs5", cache = TRUE) # all of the 2018 5-Year ACS variables for easy viewing
@@ -239,7 +240,7 @@ import_acs <- function(key, county_ls = c("Philadelphia")) {
   acs_spread <- acs_data %>%
     select(-moe) %>%
     spread(key = `variable`, value = `estimate`) %>%
-    mutate(education_HS_p = eductation_HS / total_pop,
+    mutate(education_HS_p = eductation_HS / total_pop, #DAVID - CHECK THESE JAWNS
            education_BA_p = education_BA / total_pop,
            education_MS_p = education_MS / total_pop) %>%
     mutate_if(is.numeric, round, 2) %>%

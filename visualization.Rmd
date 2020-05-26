@@ -42,6 +42,11 @@ knitr::opts_chunk$set(echo = TRUE, out.width="100%")
 require(tidyverse) ; require(sf) ; require(scales) ; require(lubridate) ; require(rphl)
 require(grid) ; require(gridExtra)
 
+# install.packages("devtools")
+#devtools::install_github("CityOfPhiladelphia/rphl")
+#extrafont::font_import()
+#https://standards.phila.gov/guidelines/design-development/brand-elements/typography/
+
 source("./code/functions.R")
 
 #### Import data &  join as needed ----------------------------------------- ####
@@ -87,7 +92,7 @@ tracts_weekly_ridership <- stops_tracts %>%
   st_join(planningdistricts_sf)
 
 # create before/after dataframe - using "2020-03-30" as the cut point
-comp <- build_comp_df(tracts_weekly_ridership, cut = "2020-03-30")
+comp <- build_comp_df(tracts_weekly_ridership, cut = c("2020-03-16", "2020-03-30"))
 
 # census tract binned by income w/ pre/post covid ridership
 income_tracts <- comp %>%
@@ -150,7 +155,7 @@ ggplot(weekly_ridership, aes(x = as_date(monday), y = daily_ridership)) +
   scale_y_continuous(labels = scales::comma, limits = c(0, 70000), breaks = seq(0, 70000, by=10000)) +
   scale_x_date(date_breaks = "1 week") + 
   xlab("Week Starting With") + 
-  ylab("Daily Bus Ridership") + 
+  ylab("Estimated Average Daily Bus Ridership") + 
   ggtitle("SEPTA Daily Bus Ridership (2020)") + 
   theme_phl() + 
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
@@ -242,3 +247,16 @@ ggplot(income_planning_linear, aes(x = as_date(monday), y = delta_p, color = DIS
   theme_phl()
 ```
 
+## Modeling Behavior
+Goal here will be to look back and see what demographics were key predictors of a neighobrhood's ability to isolate and limit travel via transit. 
+
+Things to look at:
+
+- Income
+- Race
+- Car Ownership
+- Education
+
+Note: this assumes that the bus ridership of a neighborhood mirrors the demographic makeup of a neighborhood, which we know is not very true. Bus ridership in a neighobhrood is going to be composed of people with certain characteristics - e.g. work destinations that are transit accessible; lower incomes; and probably more.
+
+Other path to look at: route level ridership loaded w/ surveyed rider demographics (pending data from SEPTA). 
