@@ -42,7 +42,7 @@ knitr::opts_chunk$set(echo = TRUE, out.width="100%")
 require(tidyverse) ; require(sf) ; require(scales) ; require(lubridate) ; require(rphl)
 require(grid) ; require(gridExtra)
 
-# install.packages("devtools")
+#install.packages("devtools")
 #devtools::install_github("CityOfPhiladelphia/rphl")
 #extrafont::font_import()
 #https://standards.phila.gov/guidelines/design-development/brand-elements/typography/
@@ -66,6 +66,12 @@ acs_spread <- read_csv("./prepped_data/acs_spread.csv") %>%
       ordered = TRUE,
       levels = c("very_low_income", "low_income", "mid_income", "high_income", "very_high_income"))
     )
+
+# DP: loading updated acs_spread with new variables (review needed)
+acs_spread <- import_acs(key = "",
+                         county_ls = c("Philadelphia"))
+acs_spread$GEOID <- as.numeric(as.character(acs_spread$GEOID))
+
 
 stops_byweek_ridership_sf <- st_read("./prepped_data/stop_data.geojson") %>% 
   mutate(stop_id = as.numeric(stop_id))

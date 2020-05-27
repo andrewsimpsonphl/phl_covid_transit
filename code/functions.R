@@ -215,23 +215,33 @@ build_comp_df <- function(tracts_weekly_ridership, cut = c("2020-03-16", "2020-0
 }
 #test <- build_comp_df(tracts_weekly_ridership, cut = "2020-03-30")
 
-
-import_acs <- function(key, county_ls = c("Philadelphia")) { # David todo: turn variables into parameter of function
+import_acs <- function(key = "", county_ls = c("Philadelphia")) { # David todo: turn variables into parameter of function
   # Read in Census Data - build a lookup table if you want an easy reference point
-  census_api_key(key) # Supply your census API key
+  #census_api_key(key) # Supply your census API key
   #v18 <- load_variables(2018, "acs5", cache = TRUE) # all of the 2018 5-Year ACS variables for easy viewing
-  
   # get the ACS data we'll be using
   acs_data <- get_acs(geography = "tract", state = "PA", 
                       county = county_ls,
                       variables = c(
                         total_pop = "B01001_001",
+                        working_pop = "B08006_001",
                         med_age = "B01002_001",
                         med_income = "B19013_001",
                         education_tot = "B15002_001",
                         eductation_HS = "B15002_011",
                         education_BA = "B15002_015",
-                        education_MS = "B15002_016"
+                        education_MS = "B15002_016",
+                        veh_own_tot = "B08014_001",
+                        veh_own_0 = "B08014_002",
+                        veh_own_1 = "B08014_003",
+                        veh_own_2 = "B08014_004",
+                        veh_own_3 = "B08014_005",
+                        veh_own_4 = "B08014_006",
+                        veh_own_5plus = "B08014_007",
+                        race_white = "B01001A_001",
+                        race_black = "B01001B_001",
+                        race_asian = "B01001D_001",
+                        race_latinx = "B01001I_001"
                       ))
   # going to factor the income bins - store them here in order
   income_class <- c("very_low_income", "low_income", "mid_income", "high_income", "very_high_income")
@@ -240,9 +250,9 @@ import_acs <- function(key, county_ls = c("Philadelphia")) { # David todo: turn 
   acs_spread <- acs_data %>%
     select(-moe) %>%
     spread(key = `variable`, value = `estimate`) %>%
-    mutate(education_HS_p = eductation_HS / total_pop, #DAVID - CHECK THESE JAWNS
-           education_BA_p = education_BA / total_pop,
-           education_MS_p = education_MS / total_pop) %>%
+    mutate(education_HS_p = eductation_HS / working_pop, #DAVID - CHECK THESE JAWNS
+           education_BA_p = education_BA / working_pop,
+           education_MS_p = education_MS / working_pop) %>%
     mutate_if(is.numeric, round, 2) %>%
     mutate(income_bucket = case_when(
       med_income < 20000 ~ "very_low_income",
@@ -253,8 +263,15 @@ import_acs <- function(key, county_ls = c("Philadelphia")) { # David todo: turn 
     mutate(income_bucket = factor(
       income_bucket, 
       ordered = TRUE,
-      levels = income_class) # order the factor by the levels listed above
-    )
+      levels = income_class)) %>% # order the factor by the levels listed above
+    mutate(no_car_pct = veh_own_0 / veh_own_tot,
+           yes_car_pct = (veh_own_1 + veh_own_2 + veh_own_3 + veh_own_4 + veh_own_5plus) / veh_own_tot) %>%
+    mutate_if(is.numeric, round, 2) %>%
+    mutate(white_pct = race_white / total_pop,
+           black_pct = race_black / total_pop,
+           asian_pct = race_asian / total_pop,
+           latinx_pct = race_latinx / total_pop) %>%
+     mutate_if(is.numeric, round, 2)
   }
 
   
@@ -326,4 +343,3 @@ get_routes_by_stop <- function(gtfs_obj) {
   stops <- gtfs_obj$stops 
 
   }
-
