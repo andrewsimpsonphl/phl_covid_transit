@@ -214,7 +214,6 @@ build_comp_df <- function(tracts_weekly_ridership, cut = c("2020-03-16", "2020-0
   return(comp)
 }
 #test <- build_comp_df(tracts_weekly_ridership, cut = "2020-03-30")
-
 import_acs <- function(key = "", county_ls = c("Philadelphia")) { # David todo: turn variables into parameter of function
   # Read in Census Data - build a lookup table if you want an easy reference point
   #census_api_key(key) # Supply your census API key
@@ -241,7 +240,27 @@ import_acs <- function(key = "", county_ls = c("Philadelphia")) { # David todo: 
                         race_white = "B01001A_001",
                         race_black = "B01001B_001",
                         race_asian = "B01001D_001",
-                        race_latinx = "B01001I_001"
+                        race_latinx = "B01001I_001",
+                        total_male_commute = "B08006_018",
+                        total_female_commute = "B08006_035",
+                        car_commute = "B08006_002",
+                        transit_commute = "B08006_008",
+                        bike_commute = "B08006_014",
+                        walk_commute = "B08006_015",
+                        wfh_commute = "B08006_017",
+                        industry_1 = "B08126_002",
+                        industry_2 = "B08126_003",
+                        industry_3 = "B08126_004",
+                        industry_4 = "B08126_005",
+                        industry_5 = "B08126_006",
+                        industry_6 = "B08126_007",
+                        industry_7 = "B08126_008",
+                        industry_8 = "B08126_009",
+                        industry_9 = "B08126_010",
+                        industry_10 = "B08126_011",
+                        industry_11 = "B08126_012",
+                        industry_12 = "B08126_013",
+                        industry_13 = "B08126_014"
                       ))
   # going to factor the income bins - store them here in order
   income_class <- c("very_low_income", "low_income", "mid_income", "high_income", "very_high_income")
@@ -250,7 +269,7 @@ import_acs <- function(key = "", county_ls = c("Philadelphia")) { # David todo: 
   acs_spread <- acs_data %>%
     select(-moe) %>%
     spread(key = `variable`, value = `estimate`) %>%
-    mutate(education_HS_p = eductation_HS / working_pop, #DAVID - CHECK THESE JAWNS
+    mutate(education_HS_p = eductation_HS / working_pop,
            education_BA_p = education_BA / working_pop,
            education_MS_p = education_MS / working_pop) %>%
     mutate_if(is.numeric, round, 2) %>%
@@ -271,8 +290,30 @@ import_acs <- function(key = "", county_ls = c("Philadelphia")) { # David todo: 
            black_pct = race_black / total_pop,
            asian_pct = race_asian / total_pop,
            latinx_pct = race_latinx / total_pop) %>%
-     mutate_if(is.numeric, round, 2)
-  }
+    mutate_if(is.numeric, round, 2) %>%
+    mutate(car_pct = car_commute / (total_male_commute + total_female_commute),
+           transit_pct = transit_commute / (total_male_commute + total_female_commute),
+           bike_pct = bike_commute / (total_male_commute + total_female_commute),
+           walk_pct = walk_commute / (total_male_commute + total_female_commute),
+           wfh_pct  = wfh_commute / (total_male_commute + total_female_commute)) %>%
+    mutate_if(is.numeric, round, 2) %>%
+    mutate(industry_total = industry_1 + industry_2 + industry_3 + industry_4 + industry_5 + industry_6 + 
+             industry_7 + industry_8 + industry_9 + industry_10 + industry_11 + industry_12 + industry_13) %>%
+    mutate(industry1_pct = industry_1 / industry_total,
+           industry2_pct = industry_2 / industry_total,
+           industry3_pct = industry_3 / industry_total,
+           industry4_pct = industry_4 / industry_total,
+           industry5_pct = industry_5 / industry_total,
+           industry6_pct = industry_6 / industry_total,
+           industry7_pct = industry_7 / industry_total,
+           industry8_pct = industry_8 / industry_total,
+           industry9_pct = industry_9 / industry_total,
+           industry10_pct = industry_10 / industry_total,
+           industry11_pct = industry_11 / industry_total,
+           industry12_pct = industry_12 / industry_total,
+           industry13_pct = industry_13 / industry_total) %>%
+    mutate_if(is.numeric, round, 2)
+}
 
   
 #### OTHER - NOT IN USE ------------------------------------ ####

@@ -40,7 +40,7 @@ h3 { /* Header 3 */
 knitr::opts_chunk$set(echo = TRUE, out.width="100%")
 
 require(tidyverse) ; require(sf) ; require(scales) ; require(lubridate) ; require(rphl)
-require(grid) ; require(gridExtra)
+require(grid) ; require(gridExtra) ; require(corrplot) ; require(stargazer)
 
 #install.packages("devtools")
 #devtools::install_github("CityOfPhiladelphia/rphl")
@@ -66,12 +66,6 @@ acs_spread <- read_csv("./prepped_data/acs_spread.csv") %>%
       ordered = TRUE,
       levels = c("very_low_income", "low_income", "mid_income", "high_income", "very_high_income"))
     )
-
-# DP: loading updated acs_spread with new variables (review needed)
-acs_spread <- import_acs(key = "",
-                         county_ls = c("Philadelphia"))
-acs_spread$GEOID <- as.numeric(as.character(acs_spread$GEOID))
-
 
 stops_byweek_ridership_sf <- st_read("./prepped_data/stop_data.geojson") %>% 
   mutate(stop_id = as.numeric(stop_id))
@@ -262,7 +256,137 @@ Things to look at:
 - Race
 - Car Ownership
 - Education
+- commute modes
+- industry characteristics
 
 Note: this assumes that the bus ridership of a neighborhood mirrors the demographic makeup of a neighborhood, which we know is not very true. Bus ridership in a neighobhrood is going to be composed of people with certain characteristics - e.g. work destinations that are transit accessible; lower incomes; and probably more.
 
-Other path to look at: route level ridership loaded w/ surveyed rider demographics (pending data from SEPTA). 
+ther path to look at: route level ridership loaded w/ surveyed rider demographics (pending data from SEPTA). 
+
+### Correlations
+```{r, echo=FALSE}
+model_vars1 <- c("pct_change", "med_age", "med_income")
+model_vars1_df <- comp[model_vars1]
+model_vars1_df$geometry <- NULL
+model_var1 <- cor(model_vars1_df, use = "pairwise.complete.obs")
+corrplot(model_var1, method='number')
+
+model_vars2 <- c("pct_change", "education_HS_p", "education_BA_p", "education_MS_p")
+model_vars2_df <- comp[model_vars2]
+model_vars2_df$geometry <- NULL
+model_var2 <- cor(model_vars2_df, use = "pairwise.complete.obs")
+corrplot(model_var2, method='number')
+
+model_vars3 <- c("pct_change", "no_car_pct", "yes_car_pct")
+model_vars3_df <- comp[model_vars3]
+model_vars3_df$geometry <- NULL
+model_var3 <- cor(model_vars3_df, use = "pairwise.complete.obs")
+corrplot(model_var3, method='number')
+
+model_vars4 <- c("pct_change", "white_pct", "black_pct", "asian_pct", "latinx_pct")
+model_vars4_df <- comp[model_vars4]
+model_vars4_df$geometry <- NULL
+model_var4 <- cor(model_vars4_df, use = "pairwise.complete.obs")
+corrplot(model_var4, method='number')
+
+model_vars5 <- c("pct_change", "car_pct", "transit_pct", "bike_pct", "walk_pct", "wfh_pct")
+model_vars5_df <- comp[model_vars5]
+model_vars5_df$geometry <- NULL
+model_var5 <- cor(model_vars5_df, use = "pairwise.complete.obs")
+corrplot(model_var5, method='number')
+
+model_vars6 <- c("pct_change", "industry1_pct", "industry2_pct", "industry3_pct", "industry4_pct", "industry5_pct", "industry6_pct", "industry7_pct",
+                 "industry8_pct", "industry9_pct", "industry10_pct", "industry11_pct", "industry12_pct", "industry13_pct")
+model_vars6_df <- comp[model_vars6]
+model_vars6_df$geometry <- NULL
+model_var6 <- cor(model_vars6_df, use = "pairwise.complete.obs")
+corrplot(model_var6, method='number', number.cex=0.45)
+```
+
+```{r, echo = false}
+#models with med_age, med_income, and % variables on education attainment, car ownership, and race
+mod.a1 <- lm(pct_change ~ med_age + med_income + education_HS_p + education_BA_p + education_MS_p 
+           + no_car_pct + yes_car_pct + white_pct + black_pct + asian_pct + latinx_pct, data = comp)
+summary(mod.a1)
+
+
+step(mod.a1, direction = "backward") #use stepwise backward function to get the best fiting model
+
+mod.a2 <- lm(pct_change ~ med_age + med_income + education_HS_p + 
+             education_MS_p + white_pct + black_pct + latinx_pct, data = comp)
+summary(mod.a2)
+
+
+#model with med_age, med_income, and % variables on education attainment, car ownership, and race, and commute
+mod.b1 <- lm(pct_change ~ med_age + med_income + education_HS_p + education_BA_p + education_MS_p 
+             + no_car_pct + yes_car_pct + white_pct + black_pct + asian_pct + latinx_pct 
+             + car_pct + transit_pct + bike_pct + walk_pct + wfh_pct, data = comp)
+summary(mod.b1)
+
+step(mod.b1, direction = "backward") #use stepwise backward function to get the best fiting model
+
+mod.b2 <- lm(pct_change ~ med_income 
+                        + education_MS_p 
+                        + no_car_pct 
+                        + car_pct, 
+                        data = comp)
+summary(mod.b2)
+
+
+#model with med_age, med_income, and % variables on education attainment, car ownership, and race, commute, and industry data
+
+mod.c1 <- lm(pct_change ~ med_age + med_income + education_HS_p + education_BA_p + education_MS_p 
+             + no_car_pct + yes_car_pct + white_pct + black_pct + asian_pct + latinx_pct + car_pct + transit_pct + bike_pct + walk_pct + wfh_pct 
+             + industry1_pct + industry2_pct + industry3_pct + industry4_pct + industry5_pct + industry6_pct + industry7_pct
+             + industry8_pct + industry9_pct + industry10_pct + industry11_pct + industry12_pct + industry13_pct, data = comp)
+summary(mod.c1)
+
+step(mod.c1, direction = "backward") #use stepwise backward function to get the best fiting model
+
+mod.c2 <- lm(pct_change ~ med_age 
+                        + med_income 
+                        + education_MS_p 
+                        + no_car_pct 
+                        + car_pct 
+                        + wfh_pct 
+                        + industry2_pct 
+                        + industry3_pct 
+                        + industry5_pct 
+                        + industry9_pct 
+                        + industry10_pct 
+                        + industry12_pct, 
+                          data = comp)
+summary(mod.c2)
+
+## take out the non-significant variables from "mod_c2"
+mod.c3 <- lm(pct_change ~ 
+             + med_income 
+             + education_MS_p 
+             + no_car_pct 
+             + car_pct 
+             + industry5_pct 
+             + industry9_pct 
+             + industry10_pct 
+             + industry12_pct, 
+              data = comp)
+summary(mod.c3)
+
+#model with variables of interest
+
+mod.d1<- lm(pct_change ~ med_income + education_BA_p + education_MS_p
+             + yes_car_pct + white_pct + asian_pct + car_pct + transit_pct
+             + industry1_pct + industry2_pct + industry3_pct + industry4_pct + industry5_pct + industry6_pct + industry7_pct
+             + industry8_pct + industry9_pct + industry10_pct + industry11_pct + industry12_pct + industry13_pct, data = comp)
+summary(mod.d1)
+
+step(mod.d1, direction = "backward") #use stepwise backward function to get the best fiting model
+
+mod.d2 <- lm(pct_change ~ med_income + education_MS_p + yes_car_pct + 
+               car_pct + transit_pct + industry2_pct + industry3_pct + industry5_pct + 
+               industry9_pct + industry10_pct + industry12_pct, data = comp)
+summary(mod.d2)
+```
+
+```{r, results='asis', echo= FALSE}
+stargazer(mod.a1, mod.a2, mod.b1, mod.b2, mod.c1, mod.c2, mod.c3, mod.d1, mod.d2, column.labels = c("mod.a1", "mod.a2", "mod.b1", "mod.b2", "mod.c1", "mod.c2", "mod.c3", "mod.d1", "mod.d2"), type ="html")
+```

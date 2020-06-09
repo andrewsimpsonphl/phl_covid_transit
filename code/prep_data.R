@@ -17,7 +17,7 @@ source("./code/functions.R")
 # data is too big for github, so stick it in your inputs folder but COMMIT/PUSH IT TO GIT
 #require(googledrive)
 #drive_auth(use_oob = TRUE)
-#drive_download("preped_apc_data.feather", path = "./inputs/spring2019_apc_data.feather", overwrite = TRUE)
+drive_download("preped_apc_data.feather", path = "./inputs/spring2019_apc_data.feather", overwrite = TRUE)
 
 #Basic work flow:
 #  Calculate ridership per trip per stop for each week
@@ -77,7 +77,8 @@ stops_byweek_ridership_sf <- build_stop_data(
 )
 
 # import and build an apc dataframe (using dplyr::spread approach)
-acs_spread <- import_acs(key = "",
+census_api_key(key = "", install =TRUE)
+acs_spread <- import_acs(key = "653cde4d4e1b34d554142871fc2a111eefdbe25d",
                          county_ls = c("Philadelphia"))
 
 # store the data that needs to be put pulled for visualizations
