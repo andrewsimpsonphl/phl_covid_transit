@@ -13,12 +13,6 @@ options(tigris_use_cache = TRUE)
 # source the function code
 source("./code/functions.R")
 
-# FIRST TIME RUN - download 2019 big APC data from google drive (need access from Andrew S.)
-# data is too big for github, so stick it in your inputs folder but COMMIT/PUSH IT TO GIT
-#require(googledrive)
-#drive_auth(use_oob = TRUE)
-drive_download("preped_apc_data.feather", path = "./inputs/spring2019_apc_data.feather", overwrite = TRUE)
-
 #Basic work flow:
 #  Calculate ridership per trip per stop for each week
 #  Calculate how many trips per day serve that stop for that week
@@ -33,9 +27,7 @@ drive_download("preped_apc_data.feather", path = "./inputs/spring2019_apc_data.f
 
 #### Import Data ---------------------------------------- ####
 # Read in apc data from 2019
-spring_2019 <- read_feather("./inputs/spring2019_apc_data.feather")
-spring_2019_stops <- spring_2019 %>% group_by(stop_id) %>% 
-  summarise(daily_ons = sum(ons), daily_offs = sum(offs))
+spring_2019_stops <- read_csv("./prepped_data/spring_2019.csv")
 
 # assembly function to generate the main stop level database to be used in the analysis
 build_stop_data <- function(apc_path, gtfs_path) {
