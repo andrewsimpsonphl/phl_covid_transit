@@ -36,7 +36,7 @@ gtfs_df <- build_gtfs_df(path = gtfs_path)
 build_stop_data <- function(gtfs_path = "./inputs/gtfs") {
   
   # import dataset from Infodev of stop level data aggregated to the week
-  year_week_stop <- read.csv("./inputs/new_input/Data_Year_Week_Stop.csv")
+  year_week_stop <- read.csv("./inputs/infodev_input/Data_Year_Week_Stop.csv")
   
   # clean up that apc data
   stop_level_data <- year_week_stop %>% clean_apc_stops_input()
@@ -63,7 +63,7 @@ build_stop_data <- function(gtfs_path = "./inputs/gtfs") {
 # beginning to look at route level data - not yet working. need to pull the GTFS schedules for each route
 build_route_data <- function() {
   # import SEPTA route level data (aggregated at month level due to sample size limitations on weekly data here - requesting weekly route level data though)
-  year_month_route_stop <- read.csv("./inputs/new_input/Data_Year_Month_Route_stop.csv")
+  year_month_route_stop <- read.csv("./infodev_input/new_input/Data_Year_Month_Route_stop.csv")
   
   # TO DO - GET MONTHLY DEPARTURES BY STOP BY ROUTE
   route_level_data <- year_month_route_stop %>% clean_apc_routes_input() %>% 
@@ -71,8 +71,6 @@ build_route_data <- function() {
     summarise(total_ons)
   
   stop_route_departure_df <- get_stop_route_departure_df(gtfs_df)
-  
-  route_income <- readxl::read_excel("./inputs/route_income.xslx")
   
   #TODO create a spatial object of bus routes
   
