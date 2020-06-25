@@ -87,12 +87,13 @@ weekly_ridership <- stops_byweek_ridership_sf %>%
 tracts_weekly_ridership <- stops_tracts %>%
   group_by(GEOID, monday) %>%
   summarise(ridership = sum(daily_ons)) %>%
+  ungroup() %>% 
   right_join(acs_spread) %>%
   st_join(ccd_sf) %>% 
-  st_join(planningdistricts_sf)
+  st_join(planningdistricts_sf) 
 
 # create before/after dataframe - using "2020-03-30" as the cut point
-comp <- build_comp_df(tracts_weekly_ridership, cut = c("2020-03-16", "2020-03-30"))
+comp <- build_comp_df(tracts_weekly_ridership, cut = c("2020-03-16", "2020-03-30")) %>% as.data.frame()
 
 # census tract binned by income w/ pre/post covid ridership
 income_tracts <- comp %>%
@@ -129,7 +130,8 @@ income_tract_linear <- tracts_weekly_ridership %>%
   arrange(monday) %>%
   filter(monday >= "2020-02-03" & income_bucket %>% is.na() == FALSE) %>% # use this jawn to set "week 0" for the delta calculation
   mutate(delta = daily_ridership - first(daily_ridership)) %>% 
-  mutate(delta_p = delta / first(daily_ridership))
+  mutate(delta_p = delta / first(daily_ridership)) %>% 
+  as.data.frame()
 
 ```
 
@@ -225,7 +227,7 @@ ggplot(income_tract_linear, aes(x = monday, y = delta_p, color = income_bucket))
 ``` {r planning_district, echo=FALSE} 
 # visualize ridership change by planning district
 
-ggplot(income_planning, aes(x = reorder(DIST_NAME.x, avg_med_income), y = pct_change, fill = avg_med_income)) +
+ggplot(income_planning %>%  as.data.frame(), aes(x = reorder(DIST_NAME.x, avg_med_income), y = pct_change, fill = avg_med_income)) +
   geom_bar(stat = "identity") +
   scale_y_continuous(labels = scales::percent) + 
   coord_cartesian(ylim = c(-1, -.5)) + 
@@ -236,7 +238,7 @@ ggplot(income_planning, aes(x = reorder(DIST_NAME.x, avg_med_income), y = pct_ch
   ylab("Bus Ridership Change Post-COVID")
 
 # need to put district names at the ends of the lines and vary the lines more to make it useful
-ggplot(income_planning_linear, aes(x = as_date(monday), y = delta_p, color = DIST_NAME)) +
+ggplot(income_planning_linear %>%  as.data.frame(), aes(x = as_date(monday), y = delta_p, color = DIST_NAME)) +
   geom_line() +
   scale_y_continuous(labels = scales::percent) + 
   scale_x_date(date_breaks = "1 week") + 
@@ -261,132 +263,5 @@ Things to look at:
 
 Note: this assumes that the bus ridership of a neighborhood mirrors the demographic makeup of a neighborhood, which we know is not very true. Bus ridership in a neighobhrood is going to be composed of people with certain characteristics - e.g. work destinations that are transit accessible; lower incomes; and probably more.
 
-ther path to look at: route level ridership loaded w/ surveyed rider demographics (pending data from SEPTA). 
+Other path to look at: route level ridership loaded w/ surveyed rider demographics (pending data from SEPTA). 
 
-### Correlations
-```{r, echo=FALSE}
-model_vars1 <- c("pct_change", "med_age", "med_income")
-model_vars1_df <- comp[model_vars1]
-model_vars1_df$geometry <- NULL
-model_var1 <- cor(model_vars1_df, use = "pairwise.complete.obs")
-corrplot(model_var1, method='number')
-
-model_vars2 <- c("pct_change", "education_HS_p", "education_BA_p", "education_MS_p")
-model_vars2_df <- comp[model_vars2]
-model_vars2_df$geometry <- NULL
-model_var2 <- cor(model_vars2_df, use = "pairwise.complete.obs")
-corrplot(model_var2, method='number')
-
-model_vars3 <- c("pct_change", "no_car_pct", "yes_car_pct")
-model_vars3_df <- comp[model_vars3]
-model_vars3_df$geometry <- NULL
-model_var3 <- cor(model_vars3_df, use = "pairwise.complete.obs")
-corrplot(model_var3, method='number')
-
-model_vars4 <- c("pct_change", "white_pct", "black_pct", "asian_pct", "latinx_pct")
-model_vars4_df <- comp[model_vars4]
-model_vars4_df$geometry <- NULL
-model_var4 <- cor(model_vars4_df, use = "pairwise.complete.obs")
-corrplot(model_var4, method='number')
-
-model_vars5 <- c("pct_change", "car_pct", "transit_pct", "bike_pct", "walk_pct", "wfh_pct")
-model_vars5_df <- comp[model_vars5]
-model_vars5_df$geometry <- NULL
-model_var5 <- cor(model_vars5_df, use = "pairwise.complete.obs")
-corrplot(model_var5, method='number')
-
-model_vars6 <- c("pct_change", "industry1_pct", "industry2_pct", "industry3_pct", "industry4_pct", "industry5_pct", "industry6_pct", "industry7_pct",
-                 "industry8_pct", "industry9_pct", "industry10_pct", "industry11_pct", "industry12_pct", "industry13_pct")
-model_vars6_df <- comp[model_vars6]
-model_vars6_df$geometry <- NULL
-model_var6 <- cor(model_vars6_df, use = "pairwise.complete.obs")
-corrplot(model_var6, method='number', number.cex=0.45)
-```
-
-```{r, echo = false}
-#models with med_age, med_income, and % variables on education attainment, car ownership, and race
-mod.a1 <- lm(pct_change ~ med_age + med_income + education_HS_p + education_BA_p + education_MS_p 
-           + no_car_pct + yes_car_pct + white_pct + black_pct + asian_pct + latinx_pct, data = comp)
-summary(mod.a1)
-
-
-step(mod.a1, direction = "backward") #use stepwise backward function to get the best fiting model
-
-mod.a2 <- lm(pct_change ~ med_age + med_income + education_HS_p + 
-             education_MS_p + white_pct + black_pct + latinx_pct, data = comp)
-summary(mod.a2)
-
-
-#model with med_age, med_income, and % variables on education attainment, car ownership, and race, and commute
-mod.b1 <- lm(pct_change ~ med_age + med_income + education_HS_p + education_BA_p + education_MS_p 
-             + no_car_pct + yes_car_pct + white_pct + black_pct + asian_pct + latinx_pct 
-             + car_pct + transit_pct + bike_pct + walk_pct + wfh_pct, data = comp)
-summary(mod.b1)
-
-step(mod.b1, direction = "backward") #use stepwise backward function to get the best fiting model
-
-mod.b2 <- lm(pct_change ~ med_income 
-                        + education_MS_p 
-                        + no_car_pct 
-                        + car_pct, 
-                        data = comp)
-summary(mod.b2)
-
-
-#model with med_age, med_income, and % variables on education attainment, car ownership, and race, commute, and industry data
-
-mod.c1 <- lm(pct_change ~ med_age + med_income + education_HS_p + education_BA_p + education_MS_p 
-             + no_car_pct + yes_car_pct + white_pct + black_pct + asian_pct + latinx_pct + car_pct + transit_pct + bike_pct + walk_pct + wfh_pct 
-             + industry1_pct + industry2_pct + industry3_pct + industry4_pct + industry5_pct + industry6_pct + industry7_pct
-             + industry8_pct + industry9_pct + industry10_pct + industry11_pct + industry12_pct + industry13_pct, data = comp)
-summary(mod.c1)
-
-step(mod.c1, direction = "backward") #use stepwise backward function to get the best fiting model
-
-mod.c2 <- lm(pct_change ~ med_age 
-                        + med_income 
-                        + education_MS_p 
-                        + no_car_pct 
-                        + car_pct 
-                        + wfh_pct 
-                        + industry2_pct 
-                        + industry3_pct 
-                        + industry5_pct 
-                        + industry9_pct 
-                        + industry10_pct 
-                        + industry12_pct, 
-                          data = comp)
-summary(mod.c2)
-
-## take out the non-significant variables from "mod_c2"
-mod.c3 <- lm(pct_change ~ 
-             + med_income 
-             + education_MS_p 
-             + no_car_pct 
-             + car_pct 
-             + industry5_pct 
-             + industry9_pct 
-             + industry10_pct 
-             + industry12_pct, 
-              data = comp)
-summary(mod.c3)
-
-#model with variables of interest
-
-mod.d1<- lm(pct_change ~ med_income + education_BA_p + education_MS_p
-             + yes_car_pct + white_pct + asian_pct + car_pct + transit_pct
-             + industry1_pct + industry2_pct + industry3_pct + industry4_pct + industry5_pct + industry6_pct + industry7_pct
-             + industry8_pct + industry9_pct + industry10_pct + industry11_pct + industry12_pct + industry13_pct, data = comp)
-summary(mod.d1)
-
-step(mod.d1, direction = "backward") #use stepwise backward function to get the best fiting model
-
-mod.d2 <- lm(pct_change ~ med_income + education_MS_p + yes_car_pct + 
-               car_pct + transit_pct + industry2_pct + industry3_pct + industry5_pct + 
-               industry9_pct + industry10_pct + industry12_pct, data = comp)
-summary(mod.d2)
-```
-
-```{r, results='asis', echo= FALSE}
-stargazer(mod.a1, mod.a2, mod.b1, mod.b2, mod.c1, mod.c2, mod.c3, mod.d1, mod.d2, column.labels = c("mod.a1", "mod.a2", "mod.b1", "mod.b2", "mod.c1", "mod.c2", "mod.c3", "mod.d1", "mod.d2"), type ="html")
-```

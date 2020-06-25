@@ -239,15 +239,15 @@ build_comp_df <- function(tracts_weekly_ridership, cut = c("2020-03-16", "2020-0
   pre_covid <- tracts_weekly_ridership %>%
     filter(monday <= cut[1]) %>%
     group_by(GEOID, ccd, DIST_NAME) %>%
-    summarise(pre_covid_ridership = mean(ridership, na.rm = TRUE)) %>%
-    replace_na(list(post_covid_ridership = 0))
+    summarise(pre_covid_ridership = mean(ridership, na.rm = TRUE)) #%>%
+    #replace_na(list(pre_covid_ridership = 0))
   
   #average post-covid ridership for each census tract
   post_covid <- tracts_weekly_ridership %>%
     filter(monday >= cut[2]) %>%
     group_by(GEOID, ccd, DIST_NAME) %>%
-    summarise(post_covid_ridership = mean(ridership, na.rm = TRUE)) %>%
-    replace_na(list(post_covid_ridership = 0))
+    summarise(post_covid_ridership = mean(ridership, na.rm = TRUE)) #%>%
+    #replace_na(list(post_covid_ridership = 0))
   
   # put pre and post covid dfs together for comparison table
   comp <- pre_covid %>%
