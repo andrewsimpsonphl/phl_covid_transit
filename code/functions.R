@@ -39,6 +39,23 @@ clean_apc_stops_input <- function(raw_apc_stops_data, weekdays = 5) {
   return(apc_stops)
 }
 
+clean_apc_routes_input <- function(raw_apc_route_data) {
+  apc_routes <- raw_apc_route_data %>% 
+    rename("stop_id" = "Stop",
+           "route_id" = "Route",
+           "year" = "Year",
+           "month" = "Month") %>%
+    group_by(route_id, stop_id, month) %>%
+    summarise(total_ons = sum(Total_Ins),
+              total_offs = sum(Total_Outs),
+              number_samples = sum(NbrStops),
+              number_sampled_trips = sum(NbrTrips))
+    #left_join(mondays, by = c("week" = "week")) %>%
+    #mutate(stop_id = as.numeric(stop_id))
+  
+  return(apc_routes)
+}
+
 # convert monthly APC data to daily
 # build list of apc sampled trips
 
@@ -50,6 +67,7 @@ get_apc_trips_summary <- function(clean_apc_input_result) {
   return(apc_trips)
 }
 
+#### GTFS DATA FUNCTIONS ------------------------------------------- ####
 # build list of all trips and stops from gtfs
 get_gtfs_trips <- function(gtfs_df) {
   gtfs_trips <- gtfs_df$trips %>% mutate(trip_id = as.numeric(trip_id))
@@ -124,6 +142,13 @@ get_daily_stop_departures <- function(frequency_df) {
   return(output)
 }
 
+get_daily_stop_route_departures <- function(frequency_df) {
+  output <- frequency_df %>%
+    group_by(stop_id, route_id) %>%
+    summarise(daily_departures = sum(departures))
+  return(output)
+}
+
 get_daily_route_departures <- function(frequency_df) {
   output <- frequency_df %>%
     group_by(route) %>%
@@ -139,7 +164,28 @@ get_stop_departure_df <- function(gtfs_df) {
     arrange(start_date) %>% 
     select(file, frequencies, start_date) %>%
     mutate(daily_departures = map(frequencies, get_daily_stop_departures)) %>%
-    select(file, start_date, daily_departures) 
+    select(file, start_date, daily_departures)
+  
+  test$end_date <- lead(test$start_date - 1, default = today())
+  
+  departure_df <- test %>%
+    unnest(daily_departures) %>%
+    ungroup() %>%
+    select(stop_id, start_date, end_date, daily_departures) 
+  
+  return(departure_df)
+  
+}
+
+get_stop_route_departure_df <- function(gtfs_df) {
+  test <- gtfs_df %>% select(file, frequencies, interval) %>%
+    mutate(start = map(interval, int_start)) %>%
+    mutate(end = map(interval, int_end)) %>%
+    mutate(start_date = as_date(start[[1]])) %>%
+    arrange(start_date) %>% 
+    select(file, frequencies, start_date) %>%
+    mutate(daily_departures = map(frequencies, get_daily_stop_route_departures)) %>%
+    select(file, start_date, daily_departures)
   
   test$end_date <- lead(test$start_date - 1, default = today())
   
@@ -186,6 +232,7 @@ build_stop_weekly_df <- function(stop_level_data, departure_df) {
 }
 #test <- build_stop_weekly_df(stop_level_data %>% filter(stop_id == 2), departure_df)
 
+#### COMPARATIVE DATA FRAME ----------------------------------------------------------####
 # build before and after dataframe
 build_comp_df <- function(tracts_weekly_ridership, cut = c("2020-03-16", "2020-03-30")) {
   # get average pre-covid ridership data for each census tract
@@ -213,6 +260,9 @@ build_comp_df <- function(tracts_weekly_ridership, cut = c("2020-03-16", "2020-0
   
   return(comp)
 }
+
+
+##### ACS DATA FUNCTIONS ------------------------------------------------------------------ ####
 #test <- build_comp_df(tracts_weekly_ridership, cut = "2020-03-30")
 import_acs <- function(key = "", county_ls = c("Philadelphia")) { # David todo: turn variables into parameter of function
   # Read in Census Data - build a lookup table if you want an easy reference point

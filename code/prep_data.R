@@ -29,20 +29,17 @@ source("./code/functions.R")
 # Read in apc data from 2019
 spring_2019_stops <- read_csv("./prepped_data/spring_2019.csv")
 
+# import gtfs files in path
+gtfs_df <- build_gtfs_df(path = gtfs_path)
+
 # assembly function to generate the main stop level database to be used in the analysis
-build_stop_data <- function(apc_path, gtfs_path) {
+build_stop_data <- function(gtfs_path = "./inputs/gtfs") {
   
   # import dataset from Infodev of stop level data aggregated to the week
-  year_month_week_stop <- read.csv("./inputs/new_input/Data_Year_Month_Week_Stop.csv")
-  year_month_route_stop <- read.csv("./inputs/new_input/Data_Year_Month_Route_stop.csv")
-  year_week_stop <- read.csv("./inputs/new_input/Data_Year_Week_Stop.csv") # should use this instead of month_week
-  
+  year_week_stop <- read.csv("./inputs/new_input/Data_Year_Week_Stop.csv")
   
   # clean up that apc data
   stop_level_data <- year_week_stop %>% clean_apc_stops_input()
-  
-  # import gtfs files in path
-  gtfs_df <- build_gtfs_df(path = gtfs_path)
   
   #build departure df of gtfs data
   departure_df <- get_stop_departure_df(gtfs_df)
@@ -63,10 +60,29 @@ build_stop_data <- function(apc_path, gtfs_path) {
   return(stops_byweek_ridership_sf)
 }
 
-stops_byweek_ridership_sf <- build_stop_data(
-  apc_path = ,
-  gtfs_path = "./inputs/gtfs"
-)
+# beginning to look at route level data - not yet working. need to pull the GTFS schedules for each route
+build_route_data <- function() {
+  # import SEPTA route level data (aggregated at month level due to sample size limitations on weekly data here - requesting weekly route level data though)
+  year_month_route_stop <- read.csv("./inputs/new_input/Data_Year_Month_Route_stop.csv")
+  
+  # TO DO - GET MONTHLY DEPARTURES BY STOP BY ROUTE
+  route_level_data <- year_month_route_stop %>% clean_apc_routes_input() %>% 
+    group_by(route_id, month) %>% 
+    summarise(total_ons)
+  
+  stop_route_departure_df <- get_stop_route_departure_df(gtfs_df)
+  
+  route_income <- readxl::read_excel("./inputs/route_income.xslx")
+  
+  #TODO create a spatial object of bus routes
+  
+  return()
+}
+
+# call build_stop_data function once to put stop data into this spatial data frame
+stops_byweek_ridership_sf <- build_stop_data()
+routes_byweek_ridership_sf <- build_route_data()
+
 
 # import and build an apc dataframe (using dplyr::spread approach)
 census_api_key(key = "", install =TRUE)
@@ -74,11 +90,12 @@ acs_spread <- import_acs(key = "653cde4d4e1b34d554142871fc2a111eefdbe25d",
                          county_ls = c("Philadelphia"))
 
 # store the data that needs to be put pulled for visualizations
-st_write(stops_byweek_ridership_sf, "./prepped_data/stop_data.geojson", overwrite = TRUE, driver = "GeoJSON")
-write_csv(acs_spread, "./prepped_data/acs_spread.csv")
+st_write(stops_byweek_ridership_sf, "./prepped_data/stop_data.geojson", overwrite = TRUE, driver = "GeoJSON") # store stop data
+st_write(routes_byweek_ridership_sf, "./prepped_data/route_month_data.geojson", overwrite = TRUE, driver = "GeoJSON") # store route data
+write_csv(acs_spread, "./prepped_data/acs_spread.csv") # store census data
 
 
-
+ggplot(stops_byweek_ridership_sf, aes(x = sample_rate)) + geom_histogram()
 
 
 
